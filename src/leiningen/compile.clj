@@ -3,7 +3,8 @@
   (:require lancet)
   (:use [clojure.contrib.java-utils :only [file]]
         [clojure.contrib.find-namespaces :only [find-namespaces-in-dir]]
-        [leiningen.deps :only [deps]])
+        [leiningen.deps :only [deps]]
+        [leiningen.checkout-deps :only [checkout-deps-paths]])
   (:refer-clojure :exclude [compile])
   (:import org.apache.tools.ant.taskdefs.Java
            java.lang.management.ManagementFactory
@@ -124,7 +125,8 @@
                                (:test-path project)
                                (:compile-path project)
                                (:resources-path project)
-                               (find-lib-jars project)))
+                               (concat (find-lib-jars project)
+                                       (checkout-deps-paths project))))
     (.setFailonerror java true)
     (when (or (= :macosx (get-os)) native-path)
       (.setFork java true)

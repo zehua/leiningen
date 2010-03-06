@@ -1,4 +1,5 @@
 (ns nom.nom.nom
+  (:require [sample2.core])
   (:gen-class))
 
 (when-not (= "1.1.0-master-SNAPSHOT" (clojure-version))
