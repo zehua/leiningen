@@ -156,7 +156,6 @@
                                           (fn? native-path) (native-path)
                                           :default native-path)))))
     (.setClasspath java (apply make-path (get-classpath project)))
-    (.setFailonerror java true)
     (.setFork java true)
     (doseq [arg (get-jvm-args project)]
       (when-not (re-matches #"^-Xbootclasspath.+" arg)
