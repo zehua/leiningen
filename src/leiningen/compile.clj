@@ -127,6 +127,12 @@
       (pr-str (pr-str form))
       (prn-str form))))
 
+(defn wall-hack-method [class-name name- params obj & args]
+    (-> class-name (.getDeclaredMethod (name name-)
+                                        (into-array Class params))
+            (doto (.setAccessible true))
+                (.invoke obj (into-array Object args))))
+
 ;; TODO: split this function up
 (defn eval-in-project
   "Executes form in an isolated classloader with the classpath and compile path
@@ -140,33 +146,54 @@
       (compile project)))
   (when (empty? (find-lib-jars project))
     (deps project))
-  (let [java (Java.)
-        native-path (or (:native-path project)
-                        (find-native-lib-path project))]
-    (.setProject java lancet/ant-project)
-    (.addSysproperty java (doto (Environment$Variable.)
-                            (.setKey "clojure.compile.path")
-                            (.setValue (:compile-path project))))
-    (when native-path
-      (.addSysproperty java (doto (Environment$Variable.)
-                              (.setKey "java.library.path")
-                              (.setValue (cond
-                                          (= java.io.File (class native-path))
-                                          (.getAbsolutePath native-path)
-                                          (fn? native-path) (native-path)
-                                          :default native-path)))))
-    (.setClasspath java (apply make-path (get-classpath project)))
-    (.setFailonerror java true)
-    (.setFork java true)
-    (doseq [arg (get-jvm-args project)]
-      (when-not (re-matches #"^-Xbootclasspath.+" arg)
-        (.setValue (.createJvmarg java) arg)))
-    (.setClassname java "clojure.main")
-    ;; to allow plugins and other tasks to customize
-    (when handler (handler java))
-    (.setValue (.createArg java) "-e")
-    (.setValue (.createArg java) (get-readable-form java project form))
-    (.executeJava java)))
+  (let [x (for [i (get-classpath project)
+                :let [f (if (string? i) (file i) i)]]
+            (str (.getAbsolutePath f)
+                 (when (.isDirectory f)
+                   "/")))
+        sunbootcp (System/getProperty "sun.boot.class.path")
+        cp (concat (.split sunbootcp ":") x)
+        cp (for [c cp] (java.net.URL. (format "file://%s" c)))
+        cp (into-array java.net.URL cp)
+        cl (java.net.URLClassLoader.
+            cp
+            (proxy [ClassLoader] []
+              (findClass [name]
+                         (throw (ClassNotFoundException. name)))
+              (getParent [] this)
+              (getResource [_] nil)
+              (getResourceAsStream [_] nil)
+              (getResources [_] nil)
+              (loadClass
+               ([name]
+                  (.loadClass this name false))
+               ([name x]
+                  (if (or (.startsWith name "java.")
+                          nil)
+                    (proxy-super loadClass name x)
+                    (throw (ClassNotFoundException. name)))))))
+        old-cl (.getContextClassLoader (Thread/currentThread))]
+    (try
+      (.setContextClassLoader (Thread/currentThread) cl)
+      (let [rt (.loadClass cl "clojure.lang.RT")
+            compiler (.loadClass cl "clojure.lang.Compiler")
+            read-string (fn [s] (wall-hack-method
+                                 rt :readString [String] nil s))
+            eval (fn [f]
+                   (wall-hack-method
+                    compiler :eval [Object] nil f))]
+        (try
+          (eval
+           (read-string
+            (pr-str
+             `(binding [*warn-on-reflection* true
+                        *compile-path* ~(:compile-path project)]
+                ~form))))
+          0
+          (catch Throwable t
+            1)))
+      (finally
+       (.setContextClassLoader (Thread/currentThread) old-cl)))))
 
 (defn- platform-nullsink []
   (file (if (= :windows (get-os))
