@@ -139,7 +139,7 @@
   set correctly for the project. Pass in a handler function to have it called
   with the java task right before executing if you need to customize any of its
   properties (classpath, library-path, etc)."
-  [project form & [handler skip-auto-compile]]
+  [project form & [init skip-auto-compile]]
   (when (and (not skip-auto-compile)
              (empty? (.list (file (:compile-path project)))))
     (binding [*silently* true]
@@ -188,9 +188,10 @@
           (eval
            (read-string
             (pr-str
-             `(binding [*warn-on-reflection* true
-                        *compile-path* ~(:compile-path project)]
-                ~form))))
+             `(do ~init
+                  (binding [*warn-on-reflection* true
+                            *compile-path* ~(:compile-path project)]
+                    ~form)))))
           0
           (catch Throwable t
             (.printStackTrace t)
