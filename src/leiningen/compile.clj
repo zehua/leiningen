@@ -191,6 +191,7 @@
                 ~form))))
           0
           (catch Throwable t
+            (.printStackTrace t)
             1)))
       (finally
        (.setContextClassLoader (Thread/currentThread) old-cl)))))
