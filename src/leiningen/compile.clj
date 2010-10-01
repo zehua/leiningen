@@ -146,13 +146,15 @@
       (compile project)))
   (when (empty? (find-lib-jars project))
     (deps project))
-  (let [x (for [i (get-classpath project)
-                :let [f (if (string? i) (file i) i)]]
-            (str (.getAbsolutePath f)
-                 (when (.isDirectory f)
-                   "/")))
-        sunbootcp (System/getProperty "sun.boot.class.path")
-        cp (concat (.split sunbootcp ":") x)
+  (let [bootcp (for [x (.split (System/getProperty "sun.boot.class.path") ":")
+                     :when (not (re-find #"clojure" x))]
+                         x)
+        cp (for [i (get-classpath project)
+                 :let [f (if (string? i) (file i) i)]]
+             (str (.getAbsolutePath f)
+                  (when (.isDirectory f)
+                    "/")))
+        cp (concat bootcp cp)
         cp (for [c cp] (java.net.URL. (format "file://%s" c)))
         cp (into-array java.net.URL cp)
         cl (java.net.URLClassLoader.
